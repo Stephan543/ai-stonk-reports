@@ -1,0 +1,12 @@
+  - name: Eaton Corporation
+    ticker:
+      nyse: ETN
+    investor_relations_url: https://www.eaton.com/ca/en-gb/company/investor-relations/investor-toolkit/financial-reports/annual-report.html
+    use_modern_headers: true 
+
+  - name: Siemens AG
+    ticker:
+      xetra: SIE
+      otc_adr: SIEGY
+    investor_relations_url: https://www.siemens.com/en-us/company/investor-relations/annual-reports/
+    use_modern_headers: false  
