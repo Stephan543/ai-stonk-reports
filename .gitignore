@@ -6,11 +6,12 @@ dist/
 wheels/
 *.egg-info
 
-# Virtual environments
+# environments
 .venv
-
 .env
 
 # Data directories
 annual_reports/
 extracted_tables/
+
+.DS_Store
