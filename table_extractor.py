@@ -1,7 +1,9 @@
 import pdfplumber
+import yaml
 from pathlib import Path
 from typing import Set, Dict
 from llm_client import classify_and_extract_financial_statement, FinancialStatementContext
+from utils import sanitize_filename
 
 SURROUNDING_CONTEXT_PAGES = 0
 
@@ -78,15 +80,25 @@ def save_financial_statement_as_markdown(classification: str, markdown_content: 
         output_path.write_text(full_content, encoding='utf-8')
 
 
-def convert_pdfs_to_markdown_tables(input_dir: Path, output_dir: Path):
+def convert_pdfs_to_markdown_tables(input_dir: Path, output_dir: Path, yaml_file: str):
     """
     Process PDFs to extract tables and convert to markdown.
     
     Args:
         input_dir: Directory containing PDF files
         output_dir: Directory to save extracted tables
+        yaml_file: Path to YAML file containing company configurations
     """
     output_dir.mkdir(parents=True, exist_ok=True)
+    
+    with open(yaml_file, 'r') as f:
+        companies = yaml.safe_load(f)
+    
+    company_name_map = {}
+    for company in companies:
+        company_name = company['name']
+        sanitized_name = sanitize_filename(company_name)
+        company_name_map[sanitized_name] = company_name
     
     pdf_files = list(input_dir.glob("**/*.pdf"))
     
@@ -116,7 +128,9 @@ def convert_pdfs_to_markdown_tables(input_dir: Path, output_dir: Path):
             }
             
             report_years = {}
-            extracted_company_name = None
+            
+            parent_dir_name = pdf_path.parent.name
+            company_name = company_name_map.get(parent_dir_name, parent_dir_name)
             
             with pdfplumber.open(pdf_path) as pdf:
                 for page_num in sorted(pages_to_extract):
@@ -126,17 +140,13 @@ def convert_pdfs_to_markdown_tables(input_dir: Path, output_dir: Path):
                     context: FinancialStatementContext = classify_and_extract_financial_statement(page, page_num)
                     
                     if context.classification:
-                        print(f"{context.classification} (Company: {context.company_name or 'unknown'}, Year: {context.report_year or 'unknown'})")
+                        print(f"{context.classification} (Company: {company_name}, Year: {context.report_year or 'unknown'})")
                         classifications[context.classification] += 1
                         
                         if context.report_year:
                             report_years[context.classification] = context.report_year
                         
-                        if context.company_name and not extracted_company_name:
-                            extracted_company_name = context.company_name
-                        
                         year_dir = context.report_year if context.report_year else 'unknown_year'
-                        company_name = extracted_company_name if extracted_company_name else pdf_path.stem
                         
                         company_dir = output_dir / company_name / year_dir / context.classification
                         output_file = company_dir / f"{context.classification}_page_{page_num + 1}.md"

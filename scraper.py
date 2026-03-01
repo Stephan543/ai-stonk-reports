@@ -5,23 +5,20 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from urllib.parse import urljoin
 import time
+from utils import sanitize_filename
 
 
 ANNUAL_REPORT_KEYWORDS = [
     'annual report',
     'annual-report',
     'annualreport',
-    'geschäftsbericht',
-    'jahresbericht',
-    'rapport annuel',
-    'årsrapport'
 ]
 
 REQUEST_TIMEOUT = 60        # Increased timeout for slow servers
 DOWNLOAD_TIMEOUT = 90
 DOWNLOAD_DELAY = 2          # Extend this to not hammer their download API
-MAX_RETRIES = 3             # Number of retry attempts for failed requests
-RETRY_DELAY = 5             # Seconds to wait between retries
+MAX_RETRIES = 3             
+RETRY_DELAY = 5             
 USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
 
 BASIC_HEADERS = {
@@ -177,13 +174,6 @@ def download_pdf(url, save_path):
     except Exception as e:
         print(f"    Error downloading {url}: {str(e)}")
         return False
-
-
-def sanitize_filename(name):
-    """Sanitize company name for use in filenames."""
-    name = re.sub(r'[<>:"/\\|?*]', '', name)
-    name = name.replace(' ', '_')
-    return name
 
 
 def run_scraper(yaml_file, output_dir, years_to_scrape):

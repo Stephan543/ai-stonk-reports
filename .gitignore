@@ -12,6 +12,6 @@ wheels/
 
 # Data directories
 annual_reports/
-extracted_tables/
+result_tables/
 
 .DS_Store
