@@ -40,11 +40,17 @@ Assume 10 years of history implies complete history. For example, 2026 does not 
 
 ## Design Decisions
 ### Two pass strategy
-Use pdfplumber to detect pages that contain tables. Include surrounding (1) page context as well to avoid missing financial statements that span multipages. Send the detected pages to a low cost LLM to extract the financial statements. GPT-4o is used for document classification.
+Use pdfplumber to detect pages that contain tables. Send the detected pages to a low cost LLM to extract the financial statements. GPT-4o is used for document classification. The purpose of this is to leverage heuristics to pre process and reduce the number of pages sent to the LLM for extraction. This will greatly improve time and cost efficiency.
 
-### Convert pdf pages to images
-Table extraction and preservation of formatting is funky business and not always reliable. In my testing using heuristics did not make the cut.
-Using pdfplumber to convert pages to images then LLM for extraction was the most reliable method I could find.
+### Convert pdf pages to images (rasterize)
+Table extraction and preservation of formatting is funky business and not always reliable. In my testing using pure heuristics did not make the cut for the variety of financial docs. 
+
+Using pdfplumber to rasterize pages into images for the LLM to use OCR on, was the most reliable method I could find.
+
+### "Rolling Master" aggregation
+The most common determinisc strategy is to use map reduce to strict target schema defined by an LLM. The issue with this is line items are not always consistent across years. 
+
+The most reasonable method found was to use the LLM to handle the merging logic using an iterative approach to avoid massive context windows.
 
 ## Known Issues
 ### The scraper has a tendency to miss the most recent annual report since they are not usually dated.
@@ -61,6 +67,9 @@ For example:
  - Some companies require filter and search to find the annual report.
 
 ### Implement OCR for scanned PDFs.
+
+### Test alternative Markdown structures.
+According to some benchmakrs Markdown-KV is more machine friendly than traditional markdown tables.
 
 ### Implement vector store for efficient retrieval of annual reports for future analysis.
 A vector store would allow for efficient retrieval of annual reports for future analysis. And allow end user to create custom queries and dashboards.

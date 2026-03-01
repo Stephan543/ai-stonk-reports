@@ -1,7 +1,9 @@
 import pdfplumber
 from pathlib import Path
 from typing import Set, Dict
-from llm_client import classify_and_extract_financial_statement
+from llm_client import classify_and_extract_financial_statement, FinancialStatementContext
+
+SURROUNDING_CONTEXT_PAGES = 0
 
 
 def isTableInPage(page) -> bool:
@@ -15,18 +17,28 @@ def isTableInPage(page) -> bool:
         True if page contains tables, False otherwise
     """
     tables = page.extract_tables()
+    # extract_tables can return a list of empty tables, so we need to check if any of them are non-empty
+    if tables and any(len(table) > 0 for table in tables):
+        return True
+    
+    # Fallback: use text-based table detection if no tables found with default settings
+    table_settings = {
+        "vertical_strategy": "text", 
+        "horizontal_strategy": "text" 
+    }
+    tables = page.extract_tables(table_settings)
     return tables and any(len(table) > 0 for table in tables)
 
 
 def identify_table_pages_with_context(pdf_path: Path) -> Set[int]:
     """
-    Identify pages with tables and include 1 surrounding page before and after.
+    Identify pages with tables and include surrounding pages before and after.
     
     Args:
         pdf_path: Path to the PDF file
     
     Returns:
-        Set of page numbers (0-indexed) that contain tables or are within 1 page of a table
+        Set of page numbers (0-indexed) that contain tables or are within SURROUNDING_CONTEXT_PAGES of a table
     """
     pages_with_context = set()
     
@@ -35,14 +47,14 @@ def identify_table_pages_with_context(pdf_path: Path) -> Set[int]:
         
         for page_num, page in enumerate(pdf.pages):
             if isTableInPage(page):
-                start = max(0, page_num - 1)
-                end = min(total_pages - 1, page_num + 1)
+                start = max(0, page_num - SURROUNDING_CONTEXT_PAGES)
+                end = min(total_pages - 1, page_num + SURROUNDING_CONTEXT_PAGES)
                 pages_with_context.update(range(start, end + 1))
     
     return pages_with_context
 
 
-def save_financial_statement_as_markdown(classification: str, markdown_content: str, output_path: Path, page_num: int):
+def save_financial_statement_as_markdown(classification: str, markdown_content: str, output_path: Path, page_num: int, report_year: str = None):
     """
     Save extracted financial statement as markdown file.
     
@@ -51,11 +63,14 @@ def save_financial_statement_as_markdown(classification: str, markdown_content: 
         markdown_content: The extracted markdown content
         output_path: Path to save the markdown file
         page_num: Page number for the filename
+        report_year: Year of the report (optional) - fallback to unknown_year
     """
     if markdown_content:
         statement_title = classification.replace('_', ' ').title()
         full_content = f"# {statement_title}\n\n"
         full_content += f"**Page:** {page_num + 1}\n\n"
+        if report_year:
+            full_content += f"**Report Year:** {report_year}\n\n"
         full_content += "---\n\n"
         full_content += markdown_content
         
@@ -91,7 +106,7 @@ def convert_pdfs_to_markdown_tables(input_dir: Path, output_dir: Path):
                 print(f"  No tables found in {pdf_path.name}")
                 continue
             
-            print(f"  Found tables on {len(pages_to_extract)} pages (including 1-page context)")
+            print(f"  Found tables on {len(pages_to_extract)} pages (including {SURROUNDING_CONTEXT_PAGES}-page context)")
             print(f"  Pages: {sorted(pages_to_extract)}")
             
             classifications: Dict[str, int] = {
@@ -100,20 +115,32 @@ def convert_pdfs_to_markdown_tables(input_dir: Path, output_dir: Path):
                 'cash_flow': 0
             }
             
+            report_years = {}
+            extracted_company_name = None
+            
             with pdfplumber.open(pdf_path) as pdf:
                 for page_num in sorted(pages_to_extract):
                     page = pdf.pages[page_num]
                     
                     print(f"    Processing page {page_num + 1}...", end=" ")
-                    classification, markdown_content = classify_and_extract_financial_statement(page, page_num)
+                    context: FinancialStatementContext = classify_and_extract_financial_statement(page, page_num)
                     
-                    if classification:
-                        print(f"{classification}")
-                        classifications[classification] += 1
+                    if context.classification:
+                        print(f"{context.classification} (Company: {context.company_name or 'unknown'}, Year: {context.report_year or 'unknown'})")
+                        classifications[context.classification] += 1
                         
-                        company_dir = output_dir / pdf_path.stem
-                        output_file = company_dir / f"{classification}_page_{page_num + 1}.md"
-                        save_financial_statement_as_markdown(classification, markdown_content, output_file, page_num)
+                        if context.report_year:
+                            report_years[context.classification] = context.report_year
+                        
+                        if context.company_name and not extracted_company_name:
+                            extracted_company_name = context.company_name
+                        
+                        year_dir = context.report_year if context.report_year else 'unknown_year'
+                        company_name = extracted_company_name if extracted_company_name else pdf_path.stem
+                        
+                        company_dir = output_dir / company_name / year_dir / context.classification
+                        output_file = company_dir / f"{context.classification}_page_{page_num + 1}.md"
+                        save_financial_statement_as_markdown(context.classification, context.markdown_content, output_file, page_num, context.report_year)
                         print(f"      Saved: {output_file.relative_to(output_dir)}")
                     else:
                         print("not a financial statement")
