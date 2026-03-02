@@ -14,4 +14,8 @@ wheels/
 annual_reports/
 result_tables/
 
+# But allow golden test files
+!golden_test_files/annual_reports/
+!golden_test_files/result_tables/
+
 .DS_Store
